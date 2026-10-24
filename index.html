@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voucher SAGA</title>
+<style>
+  :root {
+    --bg: #070612;
+    --panel: #0d0b24;
+    --text: #e8e6ff;
+    --muted: #8a86b8;
+    --cyan: #00f0ff;
+    --magenta: #ff2bd6;
+    --lime: #b6ff3b;
+    --amber: #ffb800;
+    --violet: #8a5cff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background:
+      radial-gradient(ellipse at 20% 0%, rgba(138,92,255,.22), transparent 55%),
+      radial-gradient(ellipse at 90% 100%, rgba(0,240,255,.16), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    display: flex; justify-content: center; padding: 16px;
+  }
+  .game { width: 100%; max-width: 460px; }
+
+  h1 {
+    margin: 4px 0 16px; text-align: center;
+    font-size: clamp(2rem, 9vw, 3rem); letter-spacing: .08em; text-transform: uppercase;
+    color: #fff;
+    text-shadow: 0 0 6px var(--cyan), 0 0 18px var(--cyan), 0 0 40px var(--magenta);
+  }
+  h1 span { color: var(--magenta); text-shadow: 0 0 6px var(--magenta), 0 0 22px var(--magenta); }
+
+  .hud { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .panel {
+    background: var(--panel); border: 2px solid var(--cyan); border-radius: 12px;
+    padding: 10px 14px; box-shadow: 0 0 10px rgba(0,240,255,.5), inset 0 0 14px rgba(0,240,255,.15);
+  }
+  .panel.alt { border-color: var(--magenta); box-shadow: 0 0 10px rgba(255,43,214,.5), inset 0 0 14px rgba(255,43,214,.15); }
+  .label { font-size: .7rem; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+  .value { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px currentColor; }
+  #score { color: var(--cyan); }
+  #timer { color: var(--magenta); }
+
+  .milestone { margin-bottom: 14px; border-color: var(--lime); box-shadow: 0 0 10px rgba(182,255,59,.45), inset 0 0 14px rgba(182,255,59,.12); }
+  #milestone-text { font-weight: 700; color: var(--lime); margin-bottom: 8px; }
+  .bar { height: 8px; border-radius: 99px; background: #1a1740; overflow: hidden; }
+  #bar-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--lime), var(--cyan)); box-shadow: 0 0 10px var(--lime); transition: width .4s ease; }
+
+  #board {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 10px;
+    background: #0a0820; border: 3px solid var(--cyan); border-radius: 16px;
+    box-shadow: 0 0 14px var(--cyan), 0 0 40px rgba(0,240,255,.35), inset 0 0 24px rgba(0,240,255,.2);
+    aspect-ratio: 1 / 1;
+  }
+  .cell {
+    border-radius: 10px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    transition: transform .12s ease; padding: 0;
+  }
+  .cell:hover { transform: scale(1.06); }
+  .cell.selected { outline: 2px solid #fff; transform: scale(1.1); }
+  .candy {
+    width: 68%; height: 68%; background: var(--c); border-radius: 50%;
+    box-shadow: 0 0 8px var(--c), 0 0 18px var(--c), inset 0 0 8px rgba(255,255,255,.55);
+  }
+  /* 5 distinct placeholder shapes so they are readable beyond color alone */
+  .candy.t1 { border-radius: 50%; }
+  .candy.t2 { border-radius: 14%; }
+  .candy.t3 { border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; }
+  .candy.t4 { clip-path: polygon(50% 0, 100% 100%, 0 100%); border-radius: 0; box-shadow: none; filter: drop-shadow(0 0 6px var(--c)); }
+  .candy.t5 { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); border-radius: 0; box-shadow: none; filter: drop-shadow(0 0 6px var(--c)); }
+
+  /* Modal */
+  .overlay {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(3,2,12,.82); backdrop-filter: blur(4px); padding: 16px; z-index: 10;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    width: 100%; max-width: 400px; text-align: center; padding: 28px 22px;
+    background: var(--panel); border: 2px solid var(--magenta); border-radius: 18px;
+    box-shadow: 0 0 18px var(--magenta), 0 0 60px rgba(255,43,214,.4), inset 0 0 24px rgba(255,43,214,.15);
+    animation: pop .3s ease;
+  }
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .modal h2 { margin: 0 0 6px; font-size: 1.5rem; letter-spacing: .1em; text-transform: uppercase; color: var(--amber); text-shadow: 0 0 12px var(--amber); }
+  .modal p { margin: 0 0 18px; color: var(--muted); }
+  .code {
+    font-family: "Courier New", monospace; font-size: clamp(1.6rem, 8vw, 2.2rem); font-weight: 900;
+    letter-spacing: .12em; color: #fff; padding: 14px 10px; margin-bottom: 16px; word-break: break-all;
+    background: #05041a; border: 2px dashed var(--cyan); border-radius: 12px;
+    text-shadow: 0 0 8px var(--cyan), 0 0 22px var(--cyan); user-select: all;
+  }
+  .btn {
+    font: inherit; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
+    padding: 12px 20px; border-radius: 10px; border: 2px solid var(--cyan); color: var(--cyan);
+    background: transparent; box-shadow: 0 0 10px rgba(0,240,255,.5); transition: all .15s ease;
+  }
+  .btn:hover { background: var(--cyan); color: #050414; box-shadow: 0 0 22px var(--cyan); }
+  .btn.copied { border-color: var(--lime); color: #050414; background: var(--lime); box-shadow: 0 0 22px var(--lime); }
+  .btn.ghost { border-color: var(--muted); color: var(--muted); box-shadow: none; margin-left: 8px; }
+  .btn.ghost:hover { background: var(--muted); color: #050414; box-shadow: none; }
+  .actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+  .actions .btn.ghost { margin-left: 0; }
+</style>
+</head>
+<body>
+  <main class="game">
+    <h1>Voucher <span>SAGA</span></h1>
+
+    <section class="hud">
+      <div class="panel">
+        <div class="label">Score</div>
+        <div class="value" id="score">0</div>
+      </div>
+      <div class="panel alt">
+        <div class="label">Time Played</div>
+        <div class="value" id="timer">00:00</div>
+      </div>
+    </section>
+
+    <section class="panel milestone">
+      <div id="milestone-text">Next Voucher at 100 pts</div>
+      <div class="bar"><div id="bar-fill"></div></div>
+    </section>
+
+    <div id="board" aria-label="Game board"></div>
+  </main>
+
+  <div class="overlay" id="voucher-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal">
+      <h2 id="modal-title">Voucher Unlocked!</h2>
+      <p id="modal-sub">You hit a milestone. Here is your code:</p>
+      <div class="code" id="voucher-code">------</div>
+      <div class="actions">
+        <button class="btn" id="copy-btn" type="button">Copy to Clipboard</button>
+        <button class="btn ghost" id="close-btn" type="button">Keep Playing</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+(() => {
+  'use strict';
+
+  // ---------- Config ----------
+  const SIZE = 6;
+  const POINTS_PER_CANDY = 5;       // 3 candies = 15 pts
+  const BONUS_INTERVAL_SEC = 600;   // every 10 continuous minutes
+  const BONUS_POINTS = 10;
+
+  const CANDIES = [
+    { id: 0, name: 'cyan',    color: '#00f0ff' },
+    { id: 1, name: 'magenta', color: '#ff2bd6' },
+    { id: 2, name: 'lime',    color: '#b6ff3b' },
+    { id: 3, name: 'amber',   color: '#ffb800' },
+    { id: 4, name: 'violet',  color: '#8a5cff' }
+  ];
+
+  // Each milestone fires once; codeLength sets the random code size
+  const MILESTONES = [
+    { points: 5000,   codeLength: 3 },
+    { points: 10000,  codeLength: 4 },
+    { points: 15000,  codeLength: 5 },
+    { points: 30000,  codeLength: 6 },
+    { points: 90000,  codeLength: 7 },
+    { points: 120000, codeLength: 8 }
+  ];
+
+  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+  // Players who ask their OS for less motion get no shake or sparks
+  const REDUCE_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  // ---------- State ----------
+  const state = {
+    grid: [],
+    score: 0,
+    selected: null,        // {r, c} or null
+    nextMilestone: 0,      // index into MILESTONES
+    bonusesAwarded: 0,
+    startTime: Date.now()
+  };
+  let busy = false;        // true while swaps/cascades are animating
+  let frozen = false;      // true while the voucher pop-up is open
+  const voucherQueue = []; // milestones waiting to be shown
+
+  // ---------- DOM ----------
+  const $ = (id) => document.getElementById(id);
+  const boardEl = $('board');
+  const scoreEl = $('score');
+  const timerEl = $('timer');
+  const milestoneTextEl = $('milestone-text');
+  const barFillEl = $('bar-fill');
+  const modalEl = $('voucher-modal');
+  const modalSubEl = $('modal-sub');
+  const codeEl = $('voucher-code');
+  const copyBtn = $('copy-btn');
+  const closeBtn = $('close-btn');
+
+  // Extra styles (toast, animations, effects)
+  const extraCss = document.createElement('style');
+  extraCss.textContent = `
+    #board.frozen { opacity: .45; pointer-events: none; filter: saturate(.6); transition: opacity .2s; }
+    .cell.clearing .candy { animation: clearOut .26s ease-in forwards; }
+    .cell.falling .candy { animation: dropIn .28s ease-out; }
+    @keyframes clearOut { to { transform: scale(0); opacity: 0; filter: brightness(2); } }
+    @keyframes dropIn { from { transform: translateY(-140%); opacity: .4; } to { transform: translateY(0); opacity: 1; } }
+
+    /* Selected candy: intense pulsing neon glow */
+    .cell.selected { animation: cellGlow .7s ease-in-out infinite alternate; }
+    .cell.selected .candy { animation: candyPulse .7s ease-in-out infinite alternate; }
+    @keyframes cellGlow {
+      from { box-shadow: 0 0 6px var(--c), inset 0 0 6px var(--c); border-color: var(--c); }
+      to   { box-shadow: 0 0 22px var(--c), 0 0 38px var(--c), inset 0 0 16px var(--c); border-color: #fff; }
+    }
+    @keyframes candyPulse {
+      from { transform: scale(1);    filter: brightness(1)   drop-shadow(0 0 4px var(--c)); }
+      to   { transform: scale(1.18); filter: brightness(1.6) drop-shadow(0 0 14px var(--c)) drop-shadow(0 0 26px var(--c)); }
+    }
+
+    /* Screen shake (0.2s) */
+    #board.shake { animation: boardShake .2s linear; }
+    @keyframes boardShake {
+      0%   { transform: translate(0, 0); }
+      15%  { transform: translate(-5px, 2px); }
+      30%  { transform: translate(5px, -3px); }
+      45%  { transform: translate(-4px, -2px); }
+      60%  { transform: translate(4px, 3px); }
+      75%  { transform: translate(-2px, 1px); }
+      100% { transform: translate(0, 0); }
+    }
+
+    /* Effects layer: sparks, floating points, combo text */
+    #fx { position: fixed; inset: 0; pointer-events: none; z-index: 15; overflow: hidden; }
+    .spark { position: absolute; border-radius: 50%; will-change: transform, opacity; }
+    .float-pts {
+      position: absolute; font-weight: 900; font-size: 1.15rem; letter-spacing: .04em; color: #fff;
+      text-shadow: 0 0 6px var(--c, #00f0ff), 0 0 14px var(--c, #00f0ff); white-space: nowrap;
+    }
+    .combo-text {
+      position: absolute; font-weight: 900; font-size: clamp(1.4rem, 7vw, 2.1rem); letter-spacing: .08em;
+      text-transform: uppercase; color: #fff; white-space: nowrap;
+      text-shadow: 0 0 8px #ff2bd6, 0 0 20px #ff2bd6, 0 0 40px #00f0ff;
+    }
+
+    #toast {
+      position: fixed; left: 50%; top: 18px; transform: translate(-50%, -140%);
+      padding: 12px 20px; border-radius: 12px; z-index: 20; max-width: 90vw; text-align: center;
+      font-weight: 700; letter-spacing: .06em; color: #fff; background: #0d0b24;
+      border: 2px solid #b6ff3b; box-shadow: 0 0 14px #b6ff3b, 0 0 36px rgba(182,255,59,.4);
+      text-shadow: 0 0 8px #b6ff3b; transition: transform .35s ease; pointer-events: none;
+    }
+    #toast.show { transform: translate(-50%, 0); }
+  `;
+  document.head.appendChild(extraCss);
+
+  const toastEl = document.createElement('div');
+  toastEl.id = 'toast';
+  toastEl.setAttribute('role', 'status');
+  document.body.appendChild(toastEl);
+
+  const fxEl = document.createElement('div');
+  fxEl.id = 'fx';
+  fxEl.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(fxEl);
+
+  let toastTimer = null;
+  function showToast(msg, ms = 3000) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+  }
+
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+
+  // ---------- Audio (Web Audio API, fully synthesized) ----------
+  const Sound = (() => {
+    let ctx = null;
+    let master = null;
+
+    function ensure() {
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        ctx = new AC();
+        master = ctx.createGain();
+        master.gain.value = 0.35;
+        master.connect(ctx.destination);
+      }
+      // Browsers start the context suspended until a user gesture
+      if (ctx.state === 'suspended') ctx.resume();
+      return ctx;
+    }
+
+    // One synth note: oscillator -> gain envelope -> master
+    function tone({ freq, endFreq = null, start = 0, dur = 0.15, type = 'square', vol = 0.3 }) {
+      if (!ensure()) return;
+      const t0 = ctx.currentTime + start;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t0);
+      if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, t0 + dur);
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.03);
+    }
+
+    const note = (n) => 440 * Math.pow(2, (n - 69) / 12); // MIDI note -> Hz
+
+    return {
+      unlock: ensure,
+
+      // Quick subtle upward blip
+      swap() {
+        tone({ freq: 320, endFreq: 560, dur: 0.09, type: 'triangle', vol: 0.22 });
+      },
+
+      // Soft low thud when a swap is rejected
+      reject() {
+        tone({ freq: 220, endFreq: 130, dur: 0.14, type: 'sawtooth', vol: 0.16 });
+      },
+
+      // Ascending chime. Every combo step is a whole tone higher than the last
+      // (capped at 10 steps so it never gets shrill).
+      match(combo = 1) {
+        const step = Math.min(combo - 1, 10);
+        const base = 72 + step * 2;
+        [0, 4, 7].forEach((interval, i) => {
+          tone({ freq: note(base + interval), start: i * 0.06, dur: 0.16, type: 'square', vol: 0.18 });
+        });
+        tone({ freq: note(base + 12), start: 0.18, dur: 0.22, type: 'triangle', vol: 0.22 });
+        // Extra shimmer from the third link of a chain onward
+        if (combo >= 3) {
+          tone({ freq: note(base + 19), start: 0.24, dur: 0.2, type: 'sine', vol: 0.12 });
+        }
+      },
+
+      // Low thump layered under 4+ matches
+      big() {
+        tone({ freq: 150, endFreq: 50, dur: 0.2, type: 'sawtooth', vol: 0.22 });
+      },
+
+      // Little arcade fanfare
+      voucher() {
+        const melody = [
+          [72, 0.00, 0.12], [76, 0.12, 0.12], [79, 0.24, 0.12],
+          [84, 0.36, 0.20], [79, 0.58, 0.10], [84, 0.70, 0.40]
+        ];
+        melody.forEach(([n, s, d]) => {
+          tone({ freq: note(n), start: s, dur: d, type: 'square', vol: 0.2 });
+          tone({ freq: note(n - 12), start: s, dur: d, type: 'triangle', vol: 0.14 });
+        });
+      },
+
+      // Distinct bell for the 10-minute bonus
+      bonus() {
+        [[88, 0.00], [93, 0.16], [100, 0.32]].forEach(([n, s]) => {
+          tone({ freq: note(n), start: s, dur: 0.45, type: 'sine', vol: 0.22 });
+          tone({ freq: note(n) * 2, start: s, dur: 0.25, type: 'sine', vol: 0.07 });
+        });
+      },
+
+      // Tiny click for UI buttons
+      click() {
+        tone({ freq: 700, endFreq: 500, dur: 0.05, type: 'square', vol: 0.12 });
+      }
+    };
+  })();
+
+  // Start audio on the first interaction (browser autoplay policy)
+  ['pointerdown', 'keydown', 'touchstart'].forEach((evt) =>
+    document.addEventListener(evt, () => Sound.unlock(), { once: true, passive: true })
+  );
+
+  // ---------- Visual effects ----------
+  function cellCenter(r, c) {
+    const el = boardEl.children[r * SIZE + c];
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }
+
+  // 8-10 sparks burst outward from (x, y). Position = v*t + 0.5*g*t^2, fading over 0.5s.
+  function spawnSparks(x, y, color) {
+    if (REDUCE_MOTION) return;
+    const count = 8 + Math.floor(Math.random() * 3);
+    const DURATION = 0.5;     // seconds
+    const GRAVITY = 160;      // px/s^2, a gentle downward pull
+    for (let i = 0; i < count; i++) {
+      const size = 3 + Math.random() * 3;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 90 + Math.random() * 130; // px/s
+      const vx = Math.cos(angle) * speed;
+      const vy = Math.sin(angle) * speed;
+
+      const el = document.createElement('div');
+      el.className = 'spark';
+      el.style.cssText =
+        `width:${size}px;height:${size}px;left:${x - size / 2}px;top:${y - size / 2}px;` +
+        `background:${color};box-shadow:0 0 6px ${color},0 0 12px ${color};`;
+      fxEl.appendChild(el);
+
+      const frames = [];
+      for (let f = 0; f <= 4; f++) {
+        const p = f / 4;
+        const t = p * DURATION;
+        const dx = vx * t;
+        const dy = vy * t + 0.5 * GRAVITY * t * t;
+        frames.push({
+          transform: `translate(${dx}px, ${dy}px) scale(${1 - 0.7 * p})`,
+          opacity: 1 - p
+        });
+      }
+      el.animate(frames, { duration: DURATION * 1000, easing: 'linear', fill: 'forwards' })
+        .onfinish = () => el.remove();
+    }
+  }
+
+  // Text that drifts upward and fades out
+  function floatText(text, x, y, className, color) {
+    const el = document.createElement('div');
+    el.className = className;
+    el.textContent = text;
+    if (color) el.style.setProperty('--c', color);
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    fxEl.appendChild(el);
+
+    const isCombo = className === 'combo-text';
+    const rise = isCombo ? -34 : -44;
+    const frames = isCombo
+      ? [
+          { transform: 'translate(-50%, -50%) scale(.6)',  opacity: 0 },
+          { transform: 'translate(-50%, -50%) scale(1.2)', opacity: 1, offset: 0.25 },
+          { transform: `translate(-50%, calc(-50% + ${rise}px)) scale(1)`, opacity: 0 }
+        ]
+      : [
+          { transform: 'translate(-50%, -50%)', opacity: 1 },
+          { transform: `translate(-50%, calc(-50% + ${rise}px))`, opacity: 0 }
+        ];
+    el.animate(frames, { duration: isCombo ? 1000 : 900, easing: 'ease-out', fill: 'forwards' })
+      .onfinish = () => el.remove();
+  }
+
+  function showCombo(combo) {
+    const rect = boardEl.getBoundingClientRect();
+    floatText(`COMBO x${combo}!`, rect.left + rect.width / 2, rect.top + 30, 'combo-text');
+  }
+
+  function shakeBoard() {
+    if (REDUCE_MOTION) return;
+    boardEl.classList.remove('shake');
+    void boardEl.offsetWidth; // restart the animation if it is already running
+    boardEl.classList.add('shake');
+    setTimeout(() => boardEl.classList.remove('shake'), 200);
+  }
+
+  // ---------- Grid helpers ----------
+  const randCandy = () => Math.floor(Math.random() * CANDIES.length);
+  const inBounds = (r, c) => r >= 0 && r < SIZE && c >= 0 && c < SIZE;
+
+  function buildGrid() {
+    do {
+      const g = [];
+      for (let r = 0; r < SIZE; r++) {
+        g[r] = [];
+        for (let c = 0; c < SIZE; c++) {
+          let id;
+          do {
+            id = randCandy();
+          } while (
+            (c >= 2 && g[r][c - 1] === id && g[r][c - 2] === id) ||
+            (r >= 2 && g[r - 1][c] === id && g[r - 2][c] === id)
+          );
+          g[r][c] = id;
+        }
+      }
+      state.grid = g;
+    } while (!hasMoves());
+  }
+
+  // Every straight run of 3+ as an array of "r,c" keys
+  function findRuns() {
+    const g = state.grid;
+    const runs = [];
+
+    for (let r = 0; r < SIZE; r++) {
+      let run = 1;
+      for (let c = 1; c <= SIZE; c++) {
+        if (c < SIZE && g[r][c] !== null && g[r][c] === g[r][c - 1]) {
+          run++;
+        } else {
+          if (run >= 3) {
+            const keys = [];
+            for (let k = 1; k <= run; k++) keys.push(`${r},${c - k}`);
+            runs.push(keys);
+          }
+          run = 1;
+        }
+      }
+    }
+    for (let c = 0; c < SIZE; c++) {
+      let run = 1;
+      for (let r = 1; r <= SIZE; r++) {
+        if (r < SIZE && g[r][c] !== null && g[r][c] === g[r - 1][c]) {
+          run++;
+        } else {
+          if (run >= 3) {
+            const keys = [];
+            for (let k = 1; k <= run; k++) keys.push(`${r - k},${c}`);
+            runs.push(keys);
+          }
+          run = 1;
+        }
+      }
+    }
+    return runs;
+  }
+
+  // Set of "r,c" keys for every candy in a run of 3+
+  function findMatches() {
+    const found = new Set();
+    for (const run of findRuns()) run.forEach((k) => found.add(k));
+    return found;
+  }
+
+  // Splits a match set into connected same-color groups (for floating "+N" text)
+  function groupMatches(matches) {
+    const seen = new Set();
+    const groups = [];
+    for (const start of matches) {
+      if (seen.has(start)) continue;
+      const [sr, sc] = start.split(',').map(Number);
+      const id = state.grid[sr][sc];
+      const stack = [start];
+      const cells = [];
+      seen.add(start);
+      while (stack.length) {
+        const key = stack.pop();
+        cells.push(key);
+        const [r, c] = key.split(',').map(Number);
+        for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nk = `${r + dr},${c + dc}`;
+          if (!seen.has(nk) && matches.has(nk) && inBounds(r + dr, c + dc) && state.grid[r + dr][c + dc] === id) {
+            seen.add(nk);
+            stack.push(nk);
+          }
+        }
+      }
+      groups.push({ cells, id });
+    }
+    return groups;
+  }
+
+  function swapCells(a, b) {
+    const g = state.grid;
+    [g[a.r][a.c], g[b.r][b.c]] = [g[b.r][b.c], g[a.r][a.c]];
+  }
+
+  // Is there at least one legal swap left?
+  function hasMoves() {
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        for (const [dr, dc] of [[0, 1], [1, 0]]) {
+          const nr = r + dr, nc = c + dc;
+          if (!inBounds(nr, nc)) continue;
+          swapCells({ r, c }, { r: nr, c: nc });
+          const ok = findMatches().size > 0;
+          swapCells({ r, c }, { r: nr, c: nc });
+          if (ok) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Drop candies down and refill the top. Returns Set of cells that moved or are new.
+  function applyGravity() {
+    const g = state.grid;
+    const moved = new Set();
+    for (let c = 0; c < SIZE; c++) {
+      let write = SIZE - 1;
+      for (let r = SIZE - 1; r >= 0; r--) {
+        if (g[r][c] !== null) {
+          if (write !== r) {
+            g[write][c] = g[r][c];
+            g[r][c] = null;
+            moved.add(`${write},${c}`);
+          }
+          write--;
+        }
+      }
+      for (let r = write; r >= 0; r--) {
+        g[r][c] = randCandy();
+        moved.add(`${r},${c}`);
+      }
+    }
+    return moved;
+  }
+
+  // ---------- Rendering ----------
+  function renderBoard(clearing = new Set(), falling = new Set()) {
+    boardEl.innerHTML = '';
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const id = state.grid[r][c];
+        const key = `${r},${c}`;
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'cell';
+        cell.dataset.r = r;
+        cell.dataset.c = c;
+        if (id !== null) {
+          cell.style.setProperty('--c', CANDIES[id].color); // used by the selection glow
+          cell.setAttribute('aria-label', `${CANDIES[id].name} candy, row ${r + 1} column ${c + 1}`);
+          const candy = document.createElement('div');
+          candy.className = `candy t${id + 1}`;
+          candy.style.setProperty('--c', CANDIES[id].color);
+          cell.appendChild(candy);
+        }
+        if (clearing.has(key)) cell.classList.add('clearing');
+        if (falling.has(key)) cell.classList.add('falling');
+        if (state.selected && state.selected.r === r && state.selected.c === c) {
+          cell.classList.add('selected');
+        }
+        boardEl.appendChild(cell);
+      }
+    }
+  }
+
+  // Updates score, the "Next Voucher at X pts" text, and the progress bar
+  function updateHud() {
+    scoreEl.textContent = state.score.toLocaleString();
+    const m = MILESTONES[state.nextMilestone];
+    if (m) {
+      const prev = state.nextMilestone > 0 ? MILESTONES[state.nextMilestone - 1].points : 0;
+      const pct = Math.max(0, Math.min(100, ((state.score - prev) / (m.points - prev)) * 100));
+      milestoneTextEl.textContent = `Next Voucher at ${m.points.toLocaleString('en-US')} pts`;
+      barFillEl.style.width = pct + '%';
+    } else {
+      milestoneTextEl.textContent = 'All vouchers unlocked!';
+      barFillEl.style.width = '100%';
+    }
+  }
+
+  // ---------- Scoring & vouchers ----------
+  function generateCode(length) {
+    const bytes = new Uint32Array(length);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (n) => ALPHABET[n % ALPHABET.length]).join('');
+  }
+
+  function addScore(points) {
+    state.score += points;
+    // A big jump can cross several milestones at once; queue them all
+    while (MILESTONES[state.nextMilestone] && state.score >= MILESTONES[state.nextMilestone].points) {
+      const m = MILESTONES[state.nextMilestone++];
+      voucherQueue.push({ points: m.points, code: generateCode(m.codeLength) });
+    }
+    updateHud();
+  }
+
+  // Shows the next queued voucher once the board is idle
+  function flushVouchers() {
+    if (busy || frozen || voucherQueue.length === 0) return;
+    const v = voucherQueue.shift();
+    frozen = true;
+    boardEl.classList.add('frozen');
+    modalSubEl.textContent = `You reached ${v.points.toLocaleString('en-US')} points. Here is your code:`;
+    codeEl.textContent = v.code;
+    copyBtn.textContent = 'Copy to Clipboard';
+    copyBtn.classList.remove('copied');
+    modalEl.classList.add('open');
+    Sound.voucher();
+    copyBtn.focus();
+  }
+
+  function closeVoucher() {
+    if (!modalEl.classList.contains('open')) return;
+    modalEl.classList.remove('open');
+    frozen = false;
+    boardEl.classList.remove('frozen');
+    flushVouchers(); // show the next one if several were queued
+  }
+
+  let copyTimer = null;
+  async function copyCode() {
+    const text = codeEl.textContent;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch (err) {
+      // Fallback for non-secure contexts (e.g. some file:// setups)
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;opacity:0;';
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+      document.body.removeChild(ta);
+    }
+    if (ok) Sound.click();
+    copyBtn.textContent = ok ? 'Copied!' : 'Press Ctrl+C to copy';
+    copyBtn.classList.toggle('copied', ok);
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => {
+      copyBtn.textContent = 'Copy to Clipboard';
+      copyBtn.classList.remove('copied');
+    }, 2000);
+  }
+
+  copyBtn.addEventListener('click', copyCode);
+  closeBtn.addEventListener('click', () => { Sound.click(); closeVoucher(); });
+  modalEl.addEventListener('click', (e) => { if (e.target === modalEl) closeVoucher(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeVoucher(); });
+
+  // ---------- Gameplay ----------
+  async function resolveMatches() {
+    let combo = 0;
+    let runs = findRuns();
+    while (runs.length > 0) {
+      const matches = new Set();
+      runs.forEach((run) => run.forEach((k) => matches.add(k)));
+      combo++;
+
+      Sound.match(combo);
+      if (combo >= 2) showCombo(combo);
+
+      // Show the clearing animation, then fire the effects at each cell's position
+      renderBoard(matches);
+      const groups = groupMatches(matches); // read colors before the grid is cleared
+      for (const key of matches) {
+        const [r, c] = key.split(',').map(Number);
+        const pos = cellCenter(r, c);
+        if (pos) spawnSparks(pos.x, pos.y, CANDIES[state.grid[r][c]].color);
+      }
+      // Floating "+N" at the center of each connected group (sums to the exact points awarded)
+      for (const g of groups) {
+        let sx = 0, sy = 0, n = 0;
+        for (const key of g.cells) {
+          const [r, c] = key.split(',').map(Number);
+          const pos = cellCenter(r, c);
+          if (pos) { sx += pos.x; sy += pos.y; n++; }
+        }
+        if (n) floatText(`+${g.cells.length * POINTS_PER_CANDY}`, sx / n, sy / n, 'float-pts', CANDIES[g.id].color);
+      }
+      // Shake only for a single line of 4 or 5 candies
+      if (runs.some((run) => run.length >= 4)) {
+        shakeBoard();
+        Sound.big();
+      }
+      await sleep(270);
+
+      addScore(matches.size * POINTS_PER_CANDY);
+      for (const key of matches) {
+        const [r, c] = key.split(',').map(Number);
+        state.grid[r][c] = null;
+      }
+      renderBoard();
+      await sleep(60);
+
+      const moved = applyGravity();
+      renderBoard(new Set(), moved);
+      await sleep(300);
+
+      runs = findRuns();
+    }
+
+    if (!hasMoves()) {
+      showToast('No moves left. Reshuffling!');
+      buildGrid();
+      const all = new Set(Array.from({ length: SIZE * SIZE }, (_, i) => `${Math.floor(i / SIZE)},${i % SIZE}`));
+      renderBoard(new Set(), all);
+      await sleep(300);
+    }
+  }
+
+  async function attemptSwap(a, b) {
+    busy = true;
+    state.selected = null;
+
+    Sound.swap();
+    swapCells(a, b);
+    renderBoard();
+    await sleep(160);
+
+    if (findMatches().size === 0) {
+      // Illegal move: put the candies back
+      Sound.reject();
+      swapCells(a, b);
+      renderBoard();
+      await sleep(120);
+    } else {
+      await resolveMatches();
+    }
+
+    busy = false;
+    flushVouchers();
+  }
+
+  boardEl.addEventListener('click', (e) => {
+    if (busy || frozen) return;
+    const cell = e.target.closest('.cell');
+    if (!cell) return;
+    const pos = { r: Number(cell.dataset.r), c: Number(cell.dataset.c) };
+    const sel = state.selected;
+
+    if (!sel) {
+      state.selected = pos;
+      Sound.click();
+      renderBoard();
+    } else if (sel.r === pos.r && sel.c === pos.c) {
+      state.selected = null;
+      renderBoard();
+    } else if (Math.abs(sel.r - pos.r) + Math.abs(sel.c - pos.c) === 1) {
+      attemptSwap(sel, pos);
+    } else {
+      state.selected = pos; // not adjacent: move the selection
+      Sound.click();
+      renderBoard();
+    }
+  });
+
+  // ---------- Timer & time bonus ----------
+  const pad = (n) => String(n).padStart(2, '0');
+
+  function tick() {
+    // Based on timestamps, so it stays accurate even if the tab is throttled
+    const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+    const h = Math.floor(elapsed / 3600);
+    const m = Math.floor((elapsed % 3600) / 60);
+    const s = elapsed % 60;
+    timerEl.textContent = h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+
+    const due = Math.floor(elapsed / BONUS_INTERVAL_SEC);
+    while (state.bonusesAwarded < due) {
+      state.bonusesAwarded++;
+      addScore(BONUS_POINTS);
+      showToast(`+${BONUS_POINTS} BONUS! ${state.bonusesAwarded * 10} minutes played`);
+      Sound.bonus();
+    }
+    flushVouchers(); // no-op unless the bonus crossed a milestone while idle
+  }
+  setInterval(tick, 250);
+
+  // ---------- Init ----------
+  function init() {
+    buildGrid();
+    renderBoard();
+    updateHud();
+    tick();
+  }
+  init();
+
+  // Console helpers for testing, e.g. VoucherSaga.addScore(5000)
+  window.VoucherSaga = {
+    state,
+    addScore: (n) => { addScore(n); flushVouchers(); }
+  };
+})();
+</script>
+</body>
+</html>
