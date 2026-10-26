@@ -21,14 +21,18 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; min-height: 100%; }
   body {
-    background:
-      radial-gradient(ellipse at 20% 0%, rgba(138,92,255,.22), transparent 55%),
-      radial-gradient(ellipse at 90% 100%, rgba(0,240,255,.16), transparent 55%),
-      var(--bg);
+    margin: 0;
+    padding: 10px;
+    background-color: var(--bg);
     color: var(--text);
-    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
-    display: flex; justify-content: center; padding: 16px;
-  }
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    box-sizing: border-box;
+    overflow-x: hidden;
+}
   .game { width: 100%; max-width: 460px; }
 
   h1 {
@@ -877,7 +881,7 @@
 })();
 </script>
   <footer style="text-align: center; padding: 20px; font-size: 12px;"><a href="privacy.html" style="color: #8a8e6b; text-decoration: none;">Privacy Policy</a></footer>
-  <section style="width: 100%; max-width: 500px; margin: 20px auto; padding: 15px; box-sizing: border-box; font-family: sans-serif; color: #8a8e6b; text-align: left; line-height: 1.6; clear: both; display: block;">
+  <section style="width: 100%; max-width: 450px; margin: 30px auto 0 auto; padding: 15px; box-sizing: border-box; font-family: sans-serif; color: #8a8e6b; text-align: left; line-height: 1.6; display: block;">
     <h2 style="color: #00f0ff;">About Voucher SAGA</h2>
     <p>Welcome to Voucher SAGA, a futuristic cyberpunk neon Match-3 puzzle game. Swap and match glowing neon candies to trigger massive combo chain reactions, earn points, and climb the scoreboard.</p>
     
